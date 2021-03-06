@@ -1,0 +1,23 @@
+<wizard>
+	<step id="welcome">
+		<text value="Welcome to the restore wizard.\n\nA backup has been detected.\nYou can use this wizard to restore your setting and any extra plugins that where installed when the backup was created.\n" />
+		<displaytext value="A backup has been detected." />
+		<list type="dynamic" source="listRestore" evaluation="ActionSelectionMade" onselect="ActionSelectionMoved" />
+		<code>
+self.clearSelectedKeys()
+self.selectKey("OK")
+		</code>
+		<code pos="after" async="yes">
+self.buildList(self.selectedAction)
+		</code>
+	</step>
+
+	<step id="settingsrestore" nextstep="end">
+		<text value="You have chosen to restore your settings." />
+	</step>
+
+	<step id="end">
+		<text value="The wizard is finished now." />
+		<displaytext value="The wizard is finished now." />
+	</step>
+</wizard>

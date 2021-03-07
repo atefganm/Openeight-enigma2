@@ -64,6 +64,11 @@ struct gOpcode
 		shutdown,
 
 		setCompositing,
+		sendShow,
+		sendHide,
+#ifdef USE_LIBVUGLES2
+		setView,
+#endif
 	} opcode;
 
 	gDC *dc;
@@ -144,6 +149,18 @@ struct gOpcode
 		} *setOffset;
 
 		gCompositingData *setCompositing;
+
+		struct psetShowHideInfo
+		{
+			ePoint point;
+			eSize size;
+		} *setShowHideInfo;
+#ifdef USE_LIBVUGLES2
+		struct psetViewInfo
+		{
+			eSize size;
+		} *setViewInfo;
+#endif
 	} parm;
 };
 
@@ -187,8 +204,10 @@ public:
 
 	void submit(const gOpcode &o);
 
+#ifdef CONFIG_ION
 	void lock();
 	void unlock();
+#endif
 
 	sigc::signal0<void> notify;
 
@@ -281,6 +300,11 @@ public:
 	void setCompositing(gCompositingData *comp);
 
 	void flush();
+	void sendShow(ePoint point, eSize size);
+	void sendHide(ePoint point, eSize size);
+#ifdef USE_LIBVUGLES2
+	void setView(eSize size);
+#endif
 };
 
 class gDC: public iObject

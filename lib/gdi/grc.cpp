@@ -3,6 +3,9 @@
 #include <lib/gdi/font.h>
 #include <lib/base/init.h>
 #include <lib/base/init_num.h>
+#ifdef USE_LIBVUGLES2
+#include <vuplus_gles.h>
+#endif
 
 #ifndef SYNC_PAINT
 void *gRC::thread_wrapper(void *ptr)
@@ -22,9 +25,6 @@ gRC::gRC(): rp(0), wp(0)
 {
 	ASSERT(!instance);
 	instance=this;
-	m_prev_idle_count = -1;
-	m_spinner_enabled = 0;
-	m_spinneronoff = 1;
 	CONNECT(m_notify_pump.recv_msg, gRC::recv_notify);
 #ifndef SYNC_PAINT
 	pthread_mutex_init(&mutex, 0);
@@ -44,18 +44,21 @@ gRC::gRC(): rp(0), wp(0)
 	m_spinneronoff = 1;
 }
 
+#ifdef CONFIG_ION
 void gRC::lock()
 {
 #ifndef SYNC_PAINT
 	pthread_mutex_lock(&mutex);
 #endif
 }
+
 void gRC::unlock()
 {
 #ifndef SYNC_PAINT
 	pthread_mutex_unlock(&mutex);
 #endif
 }
+#endif
 
 DEFINE_REF(gRC);
 
@@ -116,6 +119,12 @@ void gRC::submit(const gOpcode &o)
 void *gRC::thread()
 {
 	int need_notify = 0;
+#ifdef USE_LIBVUGLES2
+	if (gles_open()) {
+		gles_state_open();
+		gles_viewport(720, 576, 720 * 4);
+	}
+#endif
 #ifndef SYNC_PAINT
 	while (1)
 	{
@@ -207,6 +216,10 @@ void *gRC::thread()
 #endif
 		}
 	}
+#ifdef USE_LIBVUGLES2
+	gles_state_close();
+	gles_close();
+#endif
 #ifndef SYNC_PAINT
 	pthread_exit(0);
 #endif
@@ -447,6 +460,8 @@ void gPainter::setPalette(gRGB *colors, int start, int len)
 {
 	if ( m_dc->islocked() )
 		return;
+	if (len <= 0)
+		return;
 	ASSERT(colors);
 	gOpcode o;
 	o.opcode=gOpcode::setPalette;
@@ -454,7 +469,7 @@ void gPainter::setPalette(gRGB *colors, int start, int len)
 	gPalette *p=new gPalette;
 
 	o.parm.setPalette = new gOpcode::para::psetPalette;
-	p->data=new gRGB[len];
+	p->data=new gRGB[static_cast<size_t>(len)];
 
 	memcpy(static_cast<void*>(p->data), colors, len*sizeof(gRGB));
 	p->start=start;
@@ -624,6 +639,46 @@ void gPainter::end()
 	if ( m_dc->islocked() )
 		return;
 }
+
+void gPainter::sendShow(ePoint point, eSize size)
+{
+	if ( m_dc->islocked() )
+		return;
+	gOpcode o;
+	o.opcode=gOpcode::sendShow;
+	o.dc = m_dc.grabRef();
+	o.parm.setShowHideInfo = new gOpcode::para::psetShowHideInfo;
+	o.parm.setShowHideInfo->point = point;
+	o.parm.setShowHideInfo->size = size;
+	m_rc->submit(o);
+}
+
+void gPainter::sendHide(ePoint point, eSize size)
+{
+	if ( m_dc->islocked() )
+		return;
+	gOpcode o;
+	o.opcode=gOpcode::sendHide;
+	o.dc = m_dc.grabRef();
+	o.parm.setShowHideInfo = new gOpcode::para::psetShowHideInfo;
+	o.parm.setShowHideInfo->point = point;
+	o.parm.setShowHideInfo->size = size;
+	m_rc->submit(o);
+}
+
+#ifdef USE_LIBVUGLES2
+void gPainter::setView(eSize size)
+{
+	if ( m_dc->islocked() )
+		return;
+	gOpcode o;
+	o.opcode=gOpcode::setView;
+	o.dc = m_dc.grabRef();
+	o.parm.setViewInfo = new gOpcode::para::psetViewInfo;
+	o.parm.setViewInfo->size = size;
+	m_rc->submit(o);
+}
+#endif
 
 gDC::gDC()
 {
@@ -836,6 +891,14 @@ void gDC::exec(const gOpcode *o)
 		break;
 	case gOpcode::flush:
 		break;
+	case gOpcode::sendShow:
+		break;
+	case gOpcode::sendHide:
+		break;
+#ifdef USE_LIBVUGLES2
+	case gOpcode::setView:
+		break;
+#endif
 	case gOpcode::enableSpinner:
 		enableSpinner();
 		break;
@@ -904,7 +967,7 @@ void gDC::incrementSpinner()
 	m_spinner_temp->blit(*m_spinner_saved, eRect(0, 0, 0, 0), eRect(ePoint(0, 0), m_spinner_pos.size()));
 
 	if (m_spinner_pic[m_spinner_i])
-		m_spinner_temp->blit(*m_spinner_pic[m_spinner_i], eRect(0, 0, 0, 0), eRect(ePoint(0, 0), m_spinner_pos.size()), gPixmap::blitAlphaTest);
+		m_spinner_temp->blit(*m_spinner_pic[m_spinner_i], eRect(0, 0, 0, 0), eRect(ePoint(0, 0), m_spinner_pos.size()), gPixmap::blitAlphaBlend);
 
 	m_pixmap->blit(*m_spinner_temp, eRect(m_spinner_pos.topLeft(), eSize()), gRegion(m_spinner_pos), 0);
 	m_spinner_i++;

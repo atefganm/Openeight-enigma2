@@ -4,6 +4,7 @@
 #include <lib/base/init_num.h>
 
 #include <lib/gdi/accel.h>
+#include <lib/gdi/grc.h>
 
 #include <time.h>
 
@@ -15,15 +16,12 @@ extern void bcm_accel_blit(
 		int dst_addr, int dst_width, int dst_height, int dst_stride,
 		int src_x, int src_y, int width, int height,
 		int dst_x, int dst_y, int dwidth, int dheight,
-		int pal_addr, int flags);
-#endif
+int pal_addr, int flags);
 
 gFBDC::gFBDC()
 {
 	fb=new fbClass;
 
-	if (!fb->Available())
-		eFatal("[gFBDC] no framebuffer available");
 
 	int xres;
 	int yres;
@@ -124,6 +122,7 @@ void gFBDC::exec(const gOpcode *o)
 			surface = surface_back;
 			surface_back = s;
 
+			fb->waitVSync();
 			if (surface.data_phys > surface_back.data_phys)
 				fb->setOffset(surface_back.y);
 			else
@@ -155,6 +154,28 @@ void gFBDC::exec(const gOpcode *o)
 	}
 	case gOpcode::flush:
 		fb->blit();
+
+		if (surface_back.data_phys)
+		{
+			gUnmanagedSurface s(surface);
+			surface = surface_back;
+			surface_back = s;
+			if (surface.data_phys > surface_back.data_phys)
+			{
+				fb->setOffset(0);
+			}
+			else
+			{
+				fb->setOffset(surface_back.y);
+			}
+			bcm_accel_blit(
+				surface_back.data_phys, surface_back.x, surface_back.y, surface_back.stride, 0,
+				surface.data_phys, surface.x, surface.y, surface.stride,
+				0, 0, surface.x, surface.y,
+				0, 0, surface.x, surface.y,
+				0, 0);
+		}
+
 #if defined(CONFIG_HISILICON_FB)
 		if(islocked()==0)
 		{
@@ -206,8 +227,9 @@ void gFBDC::setResolution(int xres, int yres, int bpp)
 		)
 		return;
 
-	if (gAccel::getInstance())
-		gAccel::getInstance()->releaseAccelMemorySpace();
+	gRC *grc = gRC::getInstance();
+	if (grc)
+		grc->lock();
 
 	fb->SetMode(xres, yres, bpp);
 
@@ -238,11 +260,8 @@ void gFBDC::setResolution(int xres, int yres, int bpp)
 		surface_back.data_phys = 0;
 	}
 
-	eDebug("[gFBDC] resolution: %dx%dx%d stride=%d, %dkB available for acceleration surfaces.",
-		 surface.x, surface.y, surface.bpp, fb->Stride(), (fb->Available() - fb_size)/1024);
+	eDebug("[gFBDC] resolution: %d x %d x %d (stride: %d) pages: %d", surface.x, surface.y, surface.bpp, fb->Stride(), fb->getNumPages());
 
-	if (gAccel::getInstance())
-		gAccel::getInstance()->setAccelMemorySpace(fb->lfb + fb_size, surface.data_phys + fb_size, fb->Available() - fb_size);
 
 	if (!surface.clut.data)
 	{
@@ -263,6 +282,9 @@ void gFBDC::setResolution(int xres, int yres, int bpp)
 #endif
 
 	m_pixmap = new gPixmap(&surface);
+
+	if (grc)
+		grc->unlock();
 }
 
 void gFBDC::saveSettings()

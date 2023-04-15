@@ -190,7 +190,7 @@ public:
 	void lock();
 	void unlock();
 
-	sigc::signal0<void> notify;
+	sigc::signal<void()> notify;
 
 	void setSpinnerDC(gDC *dc) { m_spinner_dc = dc; }
 	void setSpinnerOnOff(int onoff) { m_spinneronoff = onoff; }

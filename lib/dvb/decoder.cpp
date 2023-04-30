@@ -1255,12 +1255,12 @@ RESULT eTSMPEGDecoder::showSinglePic(const char *filename)
 				unsigned char stuffing[8192];
 				int streamtype;
 				memset(stuffing, 0, sizeof(stuffing));
-				read(f, iframe, s.st_size);
+				ssize_t ret = read(f, iframe, s.st_size);
+				if (ret < 0) eDebug("[eTSMPEGDecoder] read failed: %m");
 				if (iframe[0] == 0x00 && iframe[1] == 0x00 && iframe[2] == 0x00 && iframe[3] == 0x01 && (iframe[4] & 0x0f) == 0x07)
 					streamtype = VIDEO_STREAMTYPE_MPEG4_H264;
 				else
 					streamtype = VIDEO_STREAMTYPE_MPEG2;
-
 #if HAVE_HISILICON
 				if (ioctl(m_video_clip_fd, VIDEO_SELECT_SOURCE, 0xff) < 0)
 					eDebug("[eTSMPEGDecoder] VIDEO_SELECT_SOURCE MEMORY failed: %m");
@@ -1276,7 +1276,7 @@ RESULT eTSMPEGDecoder::showSinglePic(const char *filename)
 					eDebug("[eTSMPEGDecoder] VIDEO_CONTINUE: %m");
 				if (ioctl(m_video_clip_fd, VIDEO_CLEAR_BUFFER) < 0)
 					eDebug("[eTSMPEGDecoder] VIDEO_CLEAR_BUFFER: %m");
-				while(pos <= (s.st_size-4) && !(seq_end_avail = (!iframe[pos] && !iframe[pos+1] && iframe[pos+2] == 1 && iframe[pos+3] == 0xB7)))
+				while(pos <= static_cast<size_t>(s.st_size-4) && !(seq_end_avail = (!iframe[pos] && !iframe[pos+1] && iframe[pos+2] == 1 && iframe[pos+3] == 0xB7)))
 					++pos;
 				if ((iframe[3] >> 4) != 0xE) // no pes header
 					writeAll(m_video_clip_fd, pes_header, sizeof(pes_header));
@@ -1284,9 +1284,14 @@ RESULT eTSMPEGDecoder::showSinglePic(const char *filename)
 					iframe[4] = iframe[5] = 0x00;
 				writeAll(m_video_clip_fd, iframe, s.st_size);
 				if (!seq_end_avail)
-					write(m_video_clip_fd, seq_end, sizeof(seq_end));
+				{
+					ret = write(m_video_clip_fd, seq_end, sizeof(seq_end));
+					if (ret < 0) eDebug("[eTSMPEGDecoder] write failed: %m");
+				}
 				writeAll(m_video_clip_fd, stuffing, 8192);
-#if !HAVE_HISILICON
+#if HAVE_HISILICON
+				;
+#else
 				m_showSinglePicTimer->start(150, true);
 #endif
 			}

@@ -9,10 +9,9 @@
 #endif
 #include <time.h>
 
-#if defined(CONFIG_HISILICON_FB)
+#if defined(CONFIG_ION) || defined(CONFIG_HISILICON_FB)
 #include <lib/gdi/grc.h>
 
-#ifdef CONFIG_ION
 extern void bcm_accel_blit(
 		int src_addr, int src_width, int src_height, int src_stride, int src_format,
 		int dst_addr, int dst_width, int dst_height, int dst_stride,
@@ -24,7 +23,6 @@ int pal_addr, int flags);
 gFBDC::gFBDC()
 {
 	fb=new fbClass;
-
 #ifndef CONFIG_ION
 	if (!fb->Available())
 		eFatal("[gFBDC] no framebuffer available");
